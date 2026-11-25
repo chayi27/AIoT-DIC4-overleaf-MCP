@@ -1,0 +1,14 @@
+# 003-proposed-scheme (`PA–PM`)
+- **[PA] Aim**: Formal problem statement `(Q, P, D) -> (R, D')`.
+- **[PB] Based on**: Taiwan HPA guidelines, TFDA, USDA FoodData Central, OpenSpec SDD.
+- **[PC] Cure/Cause**: Prohibiting LLM nutritional arithmetic; deterministic Domain Engine.
+- **[PD] Design**: Passive clerk -> conversational partner; `< 0.80` confidence clarification.
+- **[PE] Paper Elements**: 8-Module Architecture (`tab:modules`, M1–M8).
+- **[PF] Formulation**: Energy density, Mifflin-St Jeor, TDEE, Katch-McArdle, 14-day EMA, Yield Factor, oil absorption, geographical fusion, uncertainty CI.
+- **[PG] Graph**: 4-layer architecture flow + Overleaf figure placeholder (`architecture_en.png`).
+- **[PH] How**: Sensitivity-prioritized clarification, semantic unit harmonizer, 3-stage graceful degradation, clinical safety net & guilt-free reframing.
+- **[PI] Implementation**: `Algorithm 1: DietSense` (`alg:dietsense`).
+- **[PJ] Jump to an Example**: Beef noodle soup with egg walkthrough (`0.72 -> 0.95`, `[680, 760]` kcal, `1,450` kcal PASS).
+- **[PK] Key Points Contribution**: 4 core technical innovations.
+- **[PL] Later Simulation**: Transition to Section IV.
+- **[PM] Math Proof**: Uncertainty monotonicity, convex geographical fusion, clinical floor invariant.

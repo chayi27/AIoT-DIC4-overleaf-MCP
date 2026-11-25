@@ -1,0 +1,337 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{DietSense: A Conversational Domain AI Agent for Localized Calorie Tracking with Multi-Source Anchoring, Uncertainty Quantification, and Clinical Safety Guardrails}
+
+\author{
+\IEEEauthorblockN{1\textsuperscript{st} Author Name}
+\IEEEauthorblockA{\textit{Department / Affiliation} \\
+\textit{University / Organization}\\
+City, Country \\
+author1@example.edu}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Author Name}
+\IEEEauthorblockA{\textit{Department / Affiliation} \\
+\textit{University / Organization}\\
+City, Country \\
+author2@example.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+% [A] Attention Getter (Motivation & Research Interest)
+With global obesity surpassing one billion individuals and diet-related chronic diseases accounting for 74\% of worldwide mortality, consistent dietary self-monitoring has become a critical research priority in health informatics.
+% [B] But (Challenges)
+However, conventional calorie-tracking applications impose severe manual logging friction, resulting in an 85\% user abandonment rate within 30 days, poor coverage of Taiwanese local cuisine, and self-reported intake errors of 18\%--54\%. Although general-purpose large language models (LLMs) offer intuitive conversational interfaces, they lack auditable nutritional database anchoring and exhibit a 35.8\% mean absolute percentage error (MAPE) accompanied by numerical hallucinations.
+% [C] Cure (Proposed Novel Scheme)
+To address these challenges, we propose \textit{DietSense}, a conversational Domain AI Agent tailored for Taiwanese daily calorie and nutrition tracking.
+% [D] Development (Design Foundation)
+Our scheme is built on the architectural principle of decoupling LLM semantic orchestration from deterministic domain computation, integrating speech-to-text processing, a three-tier localized retrieval pipeline (USDA FoodData Central, Taiwan TFDA, and a custom Taiwanese cuisine vector store), a single-turn clarification loop, error-propagated confidence intervals, and non-bypassable clinical safety guardrails.
+% [E] Experiments (Evaluation Plan)
+To evaluate our proposed scheme, we design a 500-dish annotated Taiwanese cuisine benchmark dataset and a 7-day real-world user study with 20 participants comparing DietSense against MyFitnessPal and zero-shot GPT-4o.
+% [F] Findings (Expected Targets)
+Expected evaluation targets indicate $>$85\% caloric accuracy within a $\pm$20\% tolerance band, a 60\% reduction in per-meal logging time (from 85~s to under 35~s), and a System Usability Scale (SUS) score exceeding 70.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Domain AI Agent, Conversational Nutrition Tracking, Retrieval-Augmented Generation, Uncertainty Quantification, Clinical Safety Guardrails
+\end{IEEEkeywords}
+
+\section{Introduction}
+% [G] General (Current Landscape)
+With the rapid proliferation of mobile health platforms and generative artificial intelligence, personalized dietary self-monitoring has gained substantial momentum in preventive healthcare. According to the World Health Organization (WHO), global obesity has exceeded one billion people, and diet-related chronic diseases---including cardiovascular disease, type 2 diabetes, and hypertension---contribute to 74\% of global deaths \cite{who_obesity}. In Taiwan, adult overweight and obesity prevalence has reached 47.9\%, incurring over NT\$50~billion in annual direct and indirect healthcare expenditures \cite{hpa_taiwan}. Clinical studies confirm that sustained dietary self-monitoring doubles the success rate of weight management \cite{burke_self_monitoring}.
+
+% [H] However (Challenges)
+However, translating clinical intent into daily practice remains hindered by severe usability and accuracy barriers. Conventional tracking apps demand tedious manual keyword lookup and ingredient weighing, leading 85\% of users to abandon tracking within 30 days \cite{laing_abandonment} and inducing self-reported intake errors of 18\%--54\% \cite{schoeller_selfreport}. Furthermore, international crowdsourced databases severely under-represent Taiwanese street foods, bento meals, and composite soups. While general-purpose LLMs simplify input through natural language, they suffer from a 35.8\% MAPE in zero-shot calorie estimation and generate unverified numerical hallucinations \cite{llm_nutrition_mape}.
+
+% [I] In Literature (Evolution from Old to New, Simple to Complex)
+Existing solutions in the literature have evolved across three generations: (1) early manual lookup tables and crowdsourced mobile loggers, (2) intermediate computer-vision approaches estimating food volume from meal photographs \cite{vision_food}, and (3) recent LLM-driven conversational assistants enhanced with Retrieval-Augmented Generation (RAG) \cite{lewis_rag}.
+
+% [J] Judgement (Strengths & Weaknesses / SWOT Summary)
+Each paradigm exhibits distinct trade-offs: manual trackers provide structured logs but fail on user retention and local dish coverage; vision-based models reduce typing effort yet cannot observe hidden calories such as broth oil, braised sauces, or frying absorption; and standalone LLMs offer fluent dialogue at the expense of numerical reliability and clinical safety enforcement.
+
+% [K] Keypoint (Design Spirit, Novelty & Contribution Summary)
+The core design spirit of \textit{DietSense} is strict functional decoupling: \textit{LLM for Understanding and Orchestration; Domain Engine for Computation}. Its primary contributions include: (1) an eight-module conversational agent architecture; (2) three-tier localized food anchoring combining Taiwan TFDA, USDA, and a 500-dish RAG store; (3) a single-turn optimal clarification loop paired with uncertainty confidence intervals; and (4) hard clinical safety guardrails blocking daily recommendations below 1,200~kcal (female) or 1,500~kcal (male).
+
+% [L] List the Organization
+The remainder of this paper is organized as follows. Section~II reviews related work and synthesizes a comparative SWOT analysis. Section~III details the proposed DietSense scheme, mathematical formulations, algorithm, and walkthrough example. Section~IV presents the experimental setup, evaluation metrics, and target benchmarks. Section~V concludes the paper and outlines future work.
+
+\section{Related Work}
+% [M] Methods (Categorized from Old to New, Simple to Complex)
+Research on automated dietary assessment spans three methodological eras, progressing from manual databases to multimodal and agentic systems:
+\begin{enumerate}
+    \item \textit{Manual and Crowdsourced Trackers}: Platforms such as MyFitnessPal and Lose It! rely on user-generated content (UGC) catalogs. While extensive in Western packaged foods, UGC entries contain frequent duplicates and severe errors (e.g., mislabeling a full noodle bowl as 50~kcal), and require an average of 85~seconds per meal \cite{laing_abandonment}.
+    \item \textit{Vision-Based Dietary Estimation}: Deep learning models infer food categories and portion volumes from 2D/3D meal images \cite{vision_food}. Although reducing text entry, single-view imagery cannot quantify invisible cooking oils, soup fat content, or raw-to-cooked yield changes in composite East Asian dishes.
+    \item \textit{General-Purpose LLMs}: Zero-shot LLM chatbots accept colloquial descriptions but lack real-time database grounding, yielding 35.8\% MAPE and false-precision hallucinations \cite{llm_nutrition_mape}.
+\end{enumerate}
+
+% [N] New Proposed (New Trend & Novelty of Proposed Scheme)
+Recent advances in domain-specific AI agents leverage Function Calling and RAG \cite{lewis_rag} to ground LLM reasoning in external tools. DietSense extends this trend by introducing geographical proximity weighting across heterogeneous nutrition databases, cooking yield and surface oil absorption modeling, error-propagated confidence intervals, and deterministic clinical safety guardrails.
+
+% [O] Organize (SWOT 4x5 Comparison Table)
+Table~\ref{tab:swot} organizes the strengths, weaknesses, opportunities, and threats (SWOT) across the four paradigms.
+
+\begin{table*}[t]
+\centering
+\caption{SWOT Comparative Analysis of Dietary Tracking Paradigms}
+\label{tab:swot}
+\begin{tabular}{@{}p{2.3cm}p{3.4cm}p{3.6cm}p{3.4cm}p{3.4cm}@{}}
+\toprule
+\textbf{Method Category} & \textbf{Strengths} & \textbf{Weaknesses} & \textbf{Opportunities} & \textbf{Threats} \\ \midrule
+Manual / UGC Trackers & Structured nutrient logs; large Western packaged-food catalog. & High friction ($\sim$85~s/meal); noisy UGC data; poor Taiwanese dish coverage. & Integration of barcode scanning with local food tables. & 85\% 30-day user abandonment rate; 18\%--54\% self-report error. \\
+Vision-Based Systems & Low typing effort; direct visual portion estimation. & Blind to hidden broth fat, sauces, and cooking oil absorption. & Multi-angle depth sensing combined with recipe priors. & High sensitivity to lighting, occlusion, and mixed dishes. \\
+General-Purpose LLMs & Fluent colloquial NLU; zero-friction conversational interface. & 35.8\% MAPE; numerical hallucinations; no clinical guardrails. & Tool-use orchestration via Function Calling and RAG. & False-precision outputs risking unsafe extreme dieting. \\
+\textbf{DietSense (Proposed)} & Decoupled deterministic math; localized 3-tier anchoring; CI \& safety net. & Requires initial 500-dish curation and multi-API maintenance. & Scalable open-source benchmark for East Asian health AI. & External API downtime (mitigated via 3-stage degradation). \\ \bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Proposed Scheme}
+% [PA] Aim / Statement
+\subsection{Aim and Problem Statement}
+The aim of DietSense is to transform daily dietary logging from a high-friction manual clerical task into an accurate, low-burden, and clinically safe conversational workflow. Formally, given an unstructured user query $Q$, a user physiological profile $P$, and an existing daily dietary log $D$, the agent must output a transparent, provenance-backed response $R$ and an updated log $D'$.
+
+% [PB] Based on / Background / Benefit
+\subsection{Background and Design Rationale}
+DietSense is grounded in the Taiwan Health Promotion Administration Daily Dietary Guidelines, the Taiwan Food and Drug Administration (TFDA) food composition database, USDA FoodData Central, and Spec-Driven Development (SDD) via OpenSpec. By anchoring every food entity in verified laboratory data before computation, users gain effortless natural-language input while preserving scientific auditability.
+
+% [PC] Cure / Cause
+\subsection{Core Cure and Effectiveness Mechanism}
+The fundamental reason existing LLM trackers fail is the conflation of linguistic fluency with arithmetic reliability. DietSense cures this by prohibiting the LLM from performing nutritional arithmetic; instead, the LLM acts solely as a semantic parser and tool orchestrator, while a deterministic Domain Engine computes energy density, BMR/TDEE, and uncertainty bounds.
+
+% [PD] Design Architecture & Paradigm Shift
+\subsection{Architectural Paradigm Shift}
+DietSense shifts the user role from a \textit{passive database clerk} to an \textit{active conversational partner}. Under the mantra \textit{LLM for Understanding and Orchestration; Domain Engine for Computation}, ambiguous colloquial phrases trigger at most one targeted clarification question only when retrieval confidence falls below $0.80$.
+
+% [PE] Paper Elements (8-Module Architecture)
+\subsection{System Elements}
+As summarized in Table~\ref{tab:modules}, the architecture comprises eight modular elements (M1--M8) spanning input processing, parallel retrieval, deterministic analytics, clinical safety, and explainable output.
+
+\begin{table}[t]
+\centering
+\caption{Eight-Module Functional Elements of DietSense}
+\label{tab:modules}
+\begin{tabular}{@{}clp{4.8cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Element Name} & \textbf{Core Responsibility} \\ \midrule
+M1 & User Scenario & Captures unstructured voice/text meal descriptions in colloquial language. \\
+M2 & Input Processing & Performs Whisper ASR transcription, Chinese normalization, and intent classification. \\
+M3 & Planner \& Reasoning & LLM orchestrator managing context, Function Calling, and Clarification Loop ($\text{conf} < 0.80$). \\
+M4 & Data Retrieval & Parallel query pipeline across USDA API, Taiwan TFDA, and Taiwanese cuisine RAG. \\
+M5 & Analytics Engine & Computes energy density, Mifflin-St Jeor / Katch-McArdle BMR/TDEE, yield/oil, and CI. \\
+M6 & Domain Knowledge & Encodes Taiwan Daily Dietary Guidelines, 6-group exchanges, and clinical safety rules. \\
+M7 & Decision \& Advice & Evaluates TDEE gaps and generates guilt-free next-meal substitution guidance. \\
+M8 & Output \& Interaction & Renders structured Markdown cards, macronutrient charts, provenance IDs, and disclaimers. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+% [PF] Formulation / Foundation
+\subsection{Mathematical Formulations}
+All numerical outputs in M5 are governed by deterministic equations:
+
+\subsubsection{Energy Density}
+For cooked portion weight $W_{\text{portion}}$ (g) and database energy density $\text{kcal}_{100\text{g}}$:
+\begin{equation}
+E = \frac{W_{\text{portion}} \times \text{kcal}_{100\text{g}}}{100}
+\label{eq:energy}
+\end{equation}
+
+\subsubsection{Basal Metabolic Rate and TDEE}
+Baseline energy expenditure uses the Mifflin-St Jeor equations \cite{mifflin_1990}:
+\begin{align}
+\text{BMR}_{\text{male}} &= 10w + 6.25h - 5a + 5 \label{eq:bmr_m} \\
+\text{BMR}_{\text{female}} &= 10w + 6.25h - 5a - 161 \label{eq:bmr_f}
+\end{align}
+where $w$ is weight (kg), $h$ is height (cm), and $a$ is age (years), yielding:
+\begin{equation}
+\text{TDEE} = \text{BMR} \times \alpha_{\text{act}}, \quad \alpha_{\text{act}} \in [1.2, 1.9]
+\label{eq:tdee}
+\end{equation}
+When body-fat percentage $f_{\text{body}}$ is provided, M5 adopts the Katch-McArdle formula \cite{katch_mcardle}:
+\begin{equation}
+\text{BMR}_{\text{KM}} = 370 + 21.6 \times (1 - f_{\text{body}}) \times w
+\label{eq:bmr_km}
+\end{equation}
+A 14-day exponential moving average tracker adjusts TDEE downward by 5\%--8\% if two consecutive weeks of theoretical 1~kg deficit produce no weight change (excluding edema), capturing adaptive thermogenesis.
+
+\subsubsection{Yield Factor and Surface Oil Absorption}
+Raw ingredient equivalence uses cooking yield factors ($\text{YF}$: 0.85 for boiled leafy greens, 0.75 for seared meats, 2.3 for steamed rice):
+\begin{equation}
+W_{\text{raw}} = \frac{W_{\text{cooked}}}{\text{YF}}
+\label{eq:yield}
+\end{equation}
+Surface oil absorption adds fat mass via a step function over cooking verbs: steaming/boiling (+0\%), stir-frying (+5\%--8\%), battered deep-frying (+12\%--18\%), and high-absorption items (+25\%), adding $9\text{~kcal/g}$.
+
+\subsubsection{Multi-Source Conflict Resolution and Uncertainty CI}
+Conflicting database entries are fused via geographical proximity weights:
+\begin{equation}
+E_{\text{fused}} = 0.5\,E_{\text{TFDA}} + 0.4\,E_{\text{Taiwan\_RAG}} + 0.1\,E_{\text{USDA}}
+\label{eq:fusion}
+\end{equation}
+Uncertainty combines portion variance $\sigma_{\text{portion}}$ and database variance $\sigma_{\text{db}}$:
+\begin{equation}
+\sigma_{\text{total}} = \sqrt{\sigma_{\text{portion}}^2 + \sigma_{\text{db}}^2}
+\label{eq:sigma}
+\end{equation}
+mapping to $\sigma_{\text{total}} \approx 0.05$ (exact grams), $0.15$ (container terms), and $0.35$ (abstract terms), producing the confidence interval:
+\begin{equation}
+[\text{kcal}_{\text{low}}, \text{kcal}_{\text{high}}] = \left[E(1 - \sigma_{\text{total}}),\; E(1 + \sigma_{\text{total}})\right]
+\label{eq:ci}
+\end{equation}
+
+% [PG] Graph (Architecture Diagram & Flow Description)
+\subsection{System Architecture Graph and Flow}
+The end-to-end execution graph connects four layers: (1) the \textit{Input Layer} (M1--M2) normalizes speech/text and classifies intent; (2) the \textit{Core Layer} (M3--M4) orchestrates parallel retrieval and branches into the Clarification Loop whenever $\text{conf} < 0.80$; (3) the \textit{Analytics Layer} (M5--M7) computes nutrition and enforces the Clinical Safety Check before generating advice; and (4) the \textit{Output Layer} (M8) renders Markdown cards and provenance tags.
+% Overleaf Note: Upload an English version of the architecture diagram (e.g., architecture_en.png) and uncomment below:
+% \begin{figure}[t]
+% \centering
+% \includegraphics[width=\linewidth]{architecture_en.png}
+% \caption{DietSense eight-module orchestration and safety guardrail flow.}
+% \label{fig:arch}
+% \end{figure}
+
+% [PH] How (Achieving Design Goals)
+\subsection{Operational Mechanisms}
+DietSense achieves high accuracy with low friction through four mechanisms:
+\begin{enumerate}
+    \item \textit{Sensitivity-Prioritized Single-Turn Clarification}: Variables are ranked by caloric impact (e.g., $\Delta \text{kcal}_{\text{broth}} \approx 180\text{~kcal}$, $\Delta \text{kcal}_{\text{egg}} \approx 90\text{~kcal}$, $\Delta \text{kcal}_{\text{noodle}} \approx 40\text{~kcal}$). M3 asks at most one button-based question; if ignored, local defaults apply.
+    \item \textit{Semantic Unit Harmonizer}: Colloquial Taiwanese measures (e.g., standard 250--300~ml bowl, one \textit{liang} $= 37.5\text{~g}$) are mapped to grams.
+    \item \textit{Three-Stage Graceful Degradation}: Cloud API timeouts degrade to a local 1,000-item SQLite cache with fuzzy regex matching (Level~2); LLM quota exhaustion queues raw logs locally for later synchronization (Level~3).
+    \item \textit{Clinical Safety Guardrails \& Guilt-Free Reframing}: Hard floors block daily intake recommendations below $1,200\text{~kcal}$ (female) or $1,500\text{~kcal}$ (male), flag 3-day deficits $>1,000\text{~kcal/day}$, and intercept eating-disorder keywords with medical referral text. Routine surpluses receive positive, sodium-balancing dinner suggestions rather than punitive alerts.
+\end{enumerate}
+
+% [PI] Implementation / Interaction / Pseudo code
+\subsection{Implementation and Control Flow}
+Algorithm~\ref{alg:dietsense} specifies the complete interaction among retrieval, single-turn clarification, deterministic computation, and safety checking.
+
+\begin{algorithm}[t]
+\caption{DietSense Daily Calorie Intake Domain AI Agent}
+\label{alg:dietsense}
+\begin{algorithmic}[1]
+\Require User Query $Q$, User Profile $P$, Daily Log $D$
+\Ensure Formatted Response $R$, Updated Daily Log $D'$
+\State $Q_{\text{norm}} \gets \textsc{NormalizeInput}(Q)$
+\State $\text{intent} \gets \textsc{ClassifyIntent}(Q_{\text{norm}})$ \Comment{\texttt{log\_food}, \texttt{query\_nutrition}, \texttt{analyze}, \texttt{recommend}}
+\If{$\text{intent} = \text{``log\_food''}$}
+    \State $\mathcal{E} \gets \textsc{ExtractFoodEntities}(Q_{\text{norm}})$
+    \For{each $\text{food} \in \mathcal{E}$}
+        \State $\mathcal{C} \gets \textsc{QueryUSDA}(\text{food}) \cup \textsc{QueryTFDA}(\text{food}) \cup \textsc{QueryRAG}(\text{food})$
+        \State $(\text{best}, \text{conf}) \gets \textsc{RankCandidates}(\mathcal{C}, \text{food.context})$
+        \If{$\text{conf} < 0.80$} \Comment{Single-turn optimal clarification}
+            \State $q_{\text{clar}} \gets \textsc{GenerateClarification}(\text{food}, \mathcal{C})$
+            \State $a_{\text{user}} \gets \textsc{AskUser}(q_{\text{clar}})$
+            \State $\text{food} \gets \textsc{UpdateEntity}(\text{food}, a_{\text{user}})$
+            \State $(\text{best}, \text{conf}) \gets \textsc{RankCandidates}(\textsc{QueryAll}(\text{food}), \text{food.context})$
+        \EndIf
+        \State $W_g \gets \textsc{EstimatePortionGrams}(\text{food.portion}, \text{best})$
+        \State $E_{\text{pt}} \gets W_g \times \text{best.kcal}_{100\text{g}} / 100$
+        \State $(E_{\text{low}}, E_{\text{high}}) \gets \textsc{ComputeCI}(E_{\text{pt}}, \text{conf}, \text{food.portion})$
+        \State $D.\textsc{AddEntry}(\text{best}, W_g, (E_{\text{low}}, E_{\text{pt}}, E_{\text{high}}))$
+    \EndFor
+\ElsIf{$\text{intent} \in \{\text{``analyze''}, \text{``recommend''}\}$}
+    \State $E_{\text{daily}} \gets \sum_{e \in D.\text{entries}} e.E_{\text{pt}}$
+    \State $\text{BMR} \gets \textsc{CalcBMR}(P.\text{weight}, P.\text{height}, P.\text{age}, P.\text{gender})$
+    \State $\text{TDEE} \gets \text{BMR} \times P.\text{activity\_factor}$
+    \If{$\textsc{SafetyCheck}(D, P) = \text{``DANGER''}$} \Comment{$<1200/1500$~kcal or ED risk}
+        \State $\text{alert} \gets \textsc{GenerateSafetyAlert}(D, P)$
+        \State \Return $\textsc{FormatResponse}(\text{alert}),\; D$
+    \EndIf
+\EndIf
+\State $R \gets \textsc{FormatResponse}(\text{intent}, D, \textsc{GenerateCharts}(D))$
+\State \Return $R,\; D$
+\end{algorithmic}
+\end{algorithm}
+
+% [PJ] Jump to an Example
+\subsection{Illustrative Walkthrough Example}
+Consider a user entering: \textit{``Had a bowl of beef noodle soup with an egg for lunch, drank half the broth.''} M2 classifies the intent as \texttt{log\_food} and extracts entities (\textit{beef noodle soup}, \textit{egg}). Parallel retrieval (M4) returns candidate matches with $\text{conf} = 0.72 < 0.80$ due to ambiguity in broth style and egg preparation. M3 triggers a single-turn clarification: \textit{``Is the beef noodle soup clear-broth or braised, and is the egg braised or fried?''} Upon the user replying \textit{``Braised, with a braised egg,''} M4 anchors exact TFDA/RAG specifications ($\text{conf} = 0.95$). M5 computes a point estimate of $720\text{~kcal}$ with interval $[680, 760]\text{~kcal}$. Assuming a cumulative daily intake of $1,450\text{~kcal}$, M6 returns \texttt{PASS}, and M8 outputs a provenance-cited Markdown card with dinner recommendations.
+
+% [PK] Key Points Contribution
+\subsection{Key Technical Contributions}
+In summary, DietSense uniquely integrates (1) decoupled semantic-numeric execution, (2) geographical proximity fusion over local Taiwanese cuisine, (3) honest uncertainty propagation, and (4) non-bypassable clinical guardrails.
+
+% [PL] Later How to Do Simulation
+\subsection{Transition to Empirical Validation}
+To rigorously validate these mechanisms without synthetic data fabrication, Section~IV defines the 500-dish benchmark, baseline comparators, and 20-participant protocol.
+
+% [PM] Math Proof (Rationality & Invariants)
+\subsection{Mathematical Properties and Invariants}
+We establish three formal properties of the DietSense Domain Engine:
+\begin{enumerate}
+    \item \textit{Uncertainty Monotonicity}: From \eqref{eq:sigma}, since $\sigma_{\text{portion}}^2 \ge 0$ and $\sigma_{\text{db}}^2 \ge 0$, it follows that $\sigma_{\text{total}} \ge \max(\sigma_{\text{portion}}, \sigma_{\text{db}})$, guaranteeing that composite uncertainty never under-reports either individual error source, and strictly decreases as user portion specificity improves ($0.35 \rightarrow 0.15 \rightarrow 0.05$).
+    \item \textit{Convexity of Geographical Fusion}: In \eqref{eq:fusion}, the weights satisfy $w_1 + w_2 + w_3 = 0.5 + 0.4 + 0.1 = 1.0$ with $w_i > 0$. Thus, $E_{\text{fused}}$ is guaranteed to lie within the convex hull $[\min_i E_i, \max_i E_i]$ of the authoritative sources, preventing out-of-range extrapolation.
+    \item \textit{Clinical Floor Invariant}: Let $E_{\min} \in \{1200, 1500\}\text{~kcal}$ denote the sex-specific floor. Because M6 executes deterministically after M5 and overrides M7 whenever $E_{\text{target}} < E_{\min}$, no adversarial prompt can coerce the agent into outputting a recommendation below $E_{\min}$.
+\end{enumerate}
+
+\section{Simulation and Evaluation Plan}
+In strict adherence to academic integrity, no experimental scores are fabricated prior to human-study execution; all quantitative outcomes below represent planned evaluation protocols and target acceptance criteria.
+
+% [Q] Quality and Quantity Metrics
+\subsection{Quality and Quantity Performance Metrics}
+Evaluation spans three quantitative and qualitative dimensions: (1) \textit{Caloric Estimation Accuracy}, measured via Mean Absolute Percentage Error (MAPE) and attainment rate within a $\pm 20\%$ error band; (2) \textit{Logging Efficiency}, measured as mean logging time per meal in seconds; and (3) \textit{System Usability}, measured via the 100-point System Usability Scale (SUS) \cite{brooke_sus}.
+
+% [R] Related Methods to Compare
+\subsection{Related Methods for Comparison}
+DietSense will be benchmarked against two baselines: (1) \textit{Baseline 1 (Conventional Tracker)}: MyFitnessPal using manual search and portion selection; and (2) \textit{Baseline 2 (General LLM)}: zero-shot GPT-4o without external database anchoring (previously documented at 35.8\% MAPE \cite{llm_nutrition_mape}).
+
+% [S] Simulation Setup
+\subsection{Simulation and Experimental Setup}
+We construct a \textbf{500-item Taiwanese Local Dish Benchmark Dataset} covering night-market snacks (e.g., Taiwanese fried chicken, oyster omelet, sweet potato balls), bento meals (e.g., fried pork chop bento, braised pork rice), and composite noodle soups (e.g., braised beef noodle soup, danzai noodles), each annotated by nutritionists with standard gram weights, yield factors, and TFDA reference values. Additionally, \textbf{20 participants} (aged 20--50, spanning office workers, weight-management users, and regular exercisers) will conduct a \textbf{7-day} real-world dietary logging trial.
+
+% [T] Tuning Parameters
+\subsection{Parameter Tuning and Threshold Settings}
+Key operational hyperparameters are configured as follows: clarification confidence threshold $\tau = 0.80$; maximum clarification turns $= 1$; geographical fusion weights $(0.5, 0.4, 0.1)$; uncertainty factors $\sigma_{\text{total}} \in \{0.05, 0.15, 0.35\}$; clinical floors $1,200/1,500\text{~kcal}$; and a 14-day EMA window for 5\%--8\% adaptive thermogenesis TDEE adjustment.
+
+% [U] Useful Results (Expected Targets)
+\subsection{Expected Results and Target Benchmarks}
+Upon completing the 7-day study, DietSense targets: (1) $>85\%$ caloric accuracy within the $\pm 20\%$ tolerance band (versus 64.2\% for general LLMs); (2) a $60\%$ reduction in per-meal logging time, from 85~s to under 35~s; and (3) a SUS score $>70$.
+
+% [V] Verify Effectiveness
+\subsection{Effectiveness Verification Criteria}
+Effectiveness will be verified if DietSense achieves statistically significant improvements in both $\pm 20\%$ accuracy attainment over zero-shot GPT-4o and per-meal logging duration over MyFitnessPal, while maintaining zero clinical guardrail bypasses across all 140 participant-days.
+
+\section{Conclusion}
+% [W] What Proposed
+\subsection{Summary of Motivation and Proposed Solution}
+To resolve the 85\% abandonment rate of manual calorie trackers and the 35.8\% MAPE numerical hallucinations of general LLMs in Taiwanese dietary management, this paper proposed \textit{DietSense}, a conversational Domain AI Agent decoupling LLM semantic orchestration from deterministic nutritional computation.
+
+% [X] eXcel (Scenarios Where Scheme Excels)
+\subsection{Operational Strengths}
+DietSense excels in high-ambiguity, localized East Asian dining scenarios---such as night-market snacks, bento meals, and custom soup dishes---where single-turn clarification, geographical database fusion, cooking oil modeling, and guilt-free guidance jointly preserve accuracy and user retention.
+
+% [Y] Yields (Expected Deliverables & Outcomes)
+\subsection{Expected Yields and Deliverables}
+The project yields three open-source engineering deliverables: the complete Python agent codebase, the 500-dish nutritionist-annotated Taiwanese cuisine dataset, and the formal \texttt{DESIGN.md} architecture blueprint, targeting $>85\%$ accuracy within $\pm 20\%$, 60\% faster logging, and SUS $>70$.
+
+% [Z] Zen (Conclusion, Future Work & Research Contributions)
+\subsection{Future Work and Research Contributions}
+By uniting Spec-Driven Development, uncertainty-aware RAG, and hard clinical safety guardrails, DietSense establishes a reproducible paradigm for trustworthy health informatics agents. Future work will execute the 20-participant 7-day field trial, incorporate multimodal photo-assisted portion refinement, and extend longitudinal metabolic adaptation modeling.
+
+\begin{thebibliography}{00}
+\bibitem{who_obesity} World Health Organization, ``Obesity and overweight,'' Fact Sheet, 2024. [Online]. Available: \url{https://www.who.int/news-room/fact-sheets/detail/obesity-and-overweight}
+\bibitem{hpa_taiwan} Health Promotion Administration, Ministry of Health and Welfare, Taiwan, ``Nutrition and Health Survey in Taiwan (NAHSIT),'' Official Statistical Report, 2023.
+\bibitem{burke_self_monitoring} L. E. Burke, J. Wang, and M. A. Sevick, ``Self-monitoring in weight loss: A systematic review of the literature,'' \textit{J. Amer. Dietetic Assoc.}, vol. 111, no. 1, pp. 92--102, Jan. 2011.
+\bibitem{laing_abandonment} B. Y. Laing et al., ``Effectiveness of a smartphone application for weight loss compared with usual care in overweight primary care patients,'' \textit{Ann. Internal Med.}, vol. 161, no. 10\_Suppl, pp. S5--S12, Nov. 2014.
+\bibitem{schoeller_selfreport} D. A. Schoeller, ``Limitations in the assessment of dietary energy intake by self-report,'' \textit{Metabolism}, vol. 44, pp. 18--22, Feb. 1995.
+\bibitem{llm_nutrition_mape} DIC3 Project Team, ``DietSense System Design Blueprint and Baseline Review,'' Technical Specification (\texttt{DESIGN.md}), 2026.
+\bibitem{vision_food} W. Min, S. Jiang, L. Liu, Y. Rui, and R. Jain, ``A survey on food computing,'' \textit{ACM Comput. Surv.}, vol. 52, no. 5, pp. 1--36, Sep. 2019.
+\bibitem{lewis_rag} P. Lewis et al., ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \textit{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol. 33, 2020, pp. 9459--9474.
+\bibitem{mifflin_1990} M. D. Mifflin et al., ``A new predictive equation for resting energy expenditure in healthy individuals,'' \textit{Amer. J. Clin. Nutr.}, vol. 51, no. 2, pp. 241--247, Feb. 1990.
+\bibitem{katch_mcardle} F. I. Katch and W. D. McArdle, \textit{Nutrition, Weight Control, and Exercise}, 3rd ed. Philadelphia, PA, USA: Lea \& Febiger, 1988.
+\bibitem{brooke_sus} J. Brooke, ``SUS: A `quick and dirty' usability scale,'' in \textit{Usability Evaluation in Industry}, P. W. Jordan et al., Eds. London, U.K.: Taylor \& Francis, 1996, pp. 189--194.
+\end{thebibliography}
+
+\end{document}

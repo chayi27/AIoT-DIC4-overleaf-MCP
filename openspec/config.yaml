@@ -1,0 +1,28 @@
+schema: openspec-2020-a2z-split
+project:
+  name: DietSense-ICEIB-Paper
+  target_conference: IEEE ICEIB (International Conference on Electronic Communications, Internet of Things and Big Data)
+  latex_documentclass: "\\documentclass[conference]{IEEEtran}"
+
+sources:
+  sop_outline: "c:/DIC4/A2Z outline example.pdf"
+  design_blueprint: "c:/DIC4/AIoT-DIC3-ProposalRefactor/DESIGN.md"
+  readme: "c:/DIC4/AIoT-DIC3-ProposalRefactor/README.md"
+  proposal_pdf: "c:/DIC4/AIoT-DIC3-ProposalRefactor/DietSense 營養特工.pdf"
+  proposal_infographic: "c:/DIC4/AIoT-DIC3-ProposalRefactor/DietSense 營養特工研究提案.png"
+  backup_ref_dir: "c:/DIC4/myRef/"
+
+artifacts:
+  final_overleaf_draft: "c:/DIC4/ICEIB/iceib_overleaf_draft.txt"
+  preserved_overleaf_backup: "c:/DIC4/ICEIB/iceib_overleaf_draft_preserved.txt"
+
+rules:
+  academic_integrity:
+    - "Never fabricate experimental results, human-study scores, or synthetic benchmarks."
+    - "Mark all unexecuted evaluations (E, F, U, V, Y) strictly as planned protocols or expected targets."
+  latex_compilation:
+    - "Escape all non-math special characters: \\_, \\%, \\&, \\#, \\$."
+    - "Maintain 1-to-1 consistency between \\cite{...} and \\bibitem{...}."
+    - "Include explicit % [TAG] comments for every 2020 A-Z SOP element."
+  preservation:
+    - "Do not delete or overwrite the preserved final Overleaf draft without explicit user approval."
